@@ -1,5 +1,6 @@
 import { ImageResponse } from "next/og";
 import { quotes } from "./data.js";
+import { kv } from "@vercel/kv";
 
 export const runtime = "edge";
 
@@ -27,10 +28,32 @@ function sanitizeName(name) {
   return name;
 }
 
-export async function GET(request, context) {
-  let random = () => Math.round(Math.random() * quotes.length + 1);
+async function rehydrateStore(quotes) {
+  try {
+    await kv.set("quotes", quotes);
+  } catch (error) {
+    console.log(error);
+  }
+}
 
-  let { en, author, id: index } = quotes[random()];
+async function getAQuote() {
+  try {
+    const quotes = await kv.get("quotes");
+    let random = () => Math.round(Math.random() * quotes.length + 1);
+    let quote = quotes[random()];
+    await rehydrateStore(quotes.filter((i) => i.id !== quote.id));
+    console.log(quote);
+    return quote;
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+export async function GET(request, context) {
+  let { en, author, id: index } = await getAQuote();
+  rehydrateStore(quotes);
+  // let { en, author, id: index } = quotes[2];
+
   author = sanitizeName(author);
   if (!Boolean(en)) {
     en = "";
